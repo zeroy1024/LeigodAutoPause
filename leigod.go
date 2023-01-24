@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 )
@@ -115,4 +116,20 @@ func Pause(accountToken string) (Response, error) {
 	}
 
 	return responseBody, nil
+}
+
+func LeigodPause(username, password string) error {
+	loginResponse, err := Login(username, password)
+	if err != nil {
+		return errors.New("登陆失败: " + err.Error())
+	}
+
+	accountToken := loginResponse.Data.(map[string]interface{})["login_info"].(map[string]interface{})["account_token"].(string)
+	_, err = Pause(accountToken)
+	if err != nil {
+
+		return errors.New("暂停失败: " + err.Error())
+	}
+
+	return nil
 }

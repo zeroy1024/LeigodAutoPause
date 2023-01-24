@@ -1,11 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"github.com/getlantern/systray"
 	"gopkg.in/ini.v1"
 	"os"
+	"os/exec"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func init() {
@@ -24,44 +26,62 @@ func main() {
 
 	cfg, err := ini.Load("config.ini")
 	if err != nil {
-		PushNotification("配置文件加载失败", "请检查同级目录下是否存在config.ini")
+		PushNotification("ERROR", "配置文件加载失败, 请检查同级目录下是否存在config.ini")
 		os.Exit(0)
 	}
+
+	if !ProcessIsRunning("leigod.exe") {
+		leigodProgramPath := cfg.Section("leigod").Key("programPath").Value()
+		ex := exec.Command(leigodProgramPath)
+		_ = ex.Start()
+	}
+
+	firstStartWaitingTime, err := cfg.Section("").Key("firstStartWaitingTime").Int()
+	if err != nil {
+		PushNotification("ERROR", "配置文件读取出错, 请检查firstStartWaitingTime是否为数字")
+		os.Exit(0)
+	}
+	time.Sleep(time.Second * time.Duration(firstStartWaitingTime))
 
 	fileBytes, err := os.ReadFile(cfg.Section("").Key("listPath").Value())
 	if err != nil {
-		PushNotification("游戏列表文件读取出错", "请检查同级目录下是否存在"+cfg.Section("").Key("listPath").Value())
+		PushNotification("ERROR", "游戏列表文件读取出错, 请检查同级目录下是否存在"+cfg.Section("").Key("listPath").Value())
 		os.Exit(0)
 	}
-
-	username := cfg.Section("leigod").Key("username").Value()
-	password := cfg.Section("leigod").Key("password").Value()
-	loginResponse, err := Login(username, password)
-	if err != nil {
-		PushNotification("登陆失败!", err.Error())
-		os.Exit(0)
-	}
-	accountToken := loginResponse.Data.(map[string]interface{})["login_info"].(map[string]interface{})["account_token"].(string)
 
 	gameList := strings.Split(string(fileBytes), "\n")
+	username := cfg.Section("leigod").Key("username").Value()
+	password := cfg.Section("leigod").Key("password").Value()
+
+	gameExitWaitingTime, err := cfg.Section("").Key("gameExitWaitingTime").Int()
+	if err != nil {
+		PushNotification("ERROR", "配置文件出错, 请检查gameExitWaitingTime是否为数字")
+		os.Exit(0)
+	}
 
 	for {
-		if !processIsRunning("leigod.exe") {
-			PushNotification("请先运行雷神加速器!", "没有检测到加速器")
-			os.Exit(0)
-		}
-
-		if allProcessClosed(gameList) {
-			pauseResponse, err := Pause(accountToken)
+		if !ProcessIsRunning("leigod.exe") {
+			err := LeigodPause(username, password)
 			if err != nil {
-				PushNotification("暂停失败!", "自动暂停出错，请手动暂停: "+err.Error())
+				PushNotification("ERROR", err.Error())
 				os.Exit(0)
 			}
 
-			fmt.Println(pauseResponse.Message)
-
+			PushNotification("INFO", "检测到雷神加速器已关闭，将自动暂停并退出程序")
 			os.Exit(0)
 		}
-	}
 
+		if AllProcessClosed(gameList) {
+			time.Sleep(time.Second * time.Duration(gameExitWaitingTime))
+			if AllProcessClosed(gameList) {
+				err := LeigodPause(username, password)
+				if err != nil {
+					PushNotification("ERROR", err.Error())
+					os.Exit(0)
+				}
+				PushNotification("INFO", "检测到超"+strconv.Itoa(gameExitWaitingTime)+"秒未打开游戏，将自动暂停并退出程序")
+				break
+			}
+		}
+	}
 }
