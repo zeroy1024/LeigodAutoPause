@@ -2,6 +2,7 @@
 自动暂停雷神加速器
 
 ## 用法
+下载 [Releases](https://github.com/ZeroY-Code/LeigodAutoPause/releases)  
 修改config.ini中的username和password为你的雷神加速器账号  
 programPath为雷神加速器程序位置  
 运行程序会自动启动雷神加速器
